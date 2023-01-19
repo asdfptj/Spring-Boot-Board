@@ -23,28 +23,14 @@ public class QuestionService {
 
     private final QuestionRepository questionRepository;
 
-    private Specification<Question> search(String kw) {
-        return new Specification<Question>() {
-            private static final long serialVersionUID = 1L;
-            @Override
-            public Predicate toPredicate(Root<Question> q, CriteriaQuery<?> query, CriteriaBuilder cb) {
-                query.distinct(true); //중복제거
-                Join<Question, SiteUser> u1 = q.join("author", JoinType.LEFT);
-                Join<Question, Answer> a = q.join("answerList", JoinType.LEFT);
-                Join<Answer, SiteUser> u2 = a.join("author", JoinType.LEFT);
-                return cb.or(cb.like(q.get("subject"), "%" + kw + "%"),
-                        cb.like(q.get("content"), "%" + kw + "%"),
-                        cb.like(u1.get("content"), "%" + kw + "%"),
-                        cb.like(a.get("content"), "%" + kw + "%"),
-                        cb.like(u2.get("content"), "%" + kw + "%"));
-            }
-        };
-    }
 
-    public List<Question> getList() {
-        return this.questionRepository.findAll();
+    public Page<Question> getList(int page, String kw) {
+        List<Sort.Order> sorts = new ArrayList<>();
+        sorts.add(Sort.Order.desc("createDate"));
+        Pageable pageable = PageRequest.of(page, 10, Sort.by(sorts));
+//        Specification<Question> spec = search(kw);
+        return this.questionRepository.findAllByKeyword(kw, pageable);
     }
-
     public Question getQuestion(Integer id) {
         Optional<Question> question = this.questionRepository.findById(id);
         if(question.isPresent()) {
@@ -53,13 +39,7 @@ public class QuestionService {
             throw new DataNotFoundException("question not found");
         }
     }
-    public Page<Question> getList(int page, String kw) {
-        List<Sort.Order> sorts = new ArrayList<>();
-        sorts.add(Sort.Order.desc("createDate"));
-        Pageable pageable = PageRequest.of(page, 10, Sort.by(sorts));
-        Specification<Question> spec = search(kw);
-        return this.questionRepository.findAll(pageable);
-    }
+
 
     public void create(String subject, String content, SiteUser user) {
         Question q = new Question();
@@ -84,5 +64,22 @@ public class QuestionService {
     public void vote(Question question, SiteUser siteUser) {
         question.getVoter().add(siteUser);
         this.questionRepository.save(question);
+    }
+    private Specification<Question> search(String kw) {
+        return new Specification<Question>() {
+            private static final long serialVersionUID = 1L;
+            @Override
+            public Predicate toPredicate(Root<Question> q, CriteriaQuery<?> query, CriteriaBuilder cb) {
+                query.distinct(true);  // 중복을 제거
+                Join<Question, SiteUser> u1 = q.join("author", JoinType.LEFT);
+                Join<Question, Answer> a = q.join("answerList", JoinType.LEFT);
+                Join<Answer, SiteUser> u2 = a.join("author", JoinType.LEFT);
+                return cb.or(cb.like(q.get("subject"), "%" + kw + "%"), // 제목
+                        cb.like(q.get("content"), "%" + kw + "%"),      // 내용
+                        cb.like(u1.get("username"), "%" + kw + "%"),    // 질문 작성자
+                        cb.like(a.get("content"), "%" + kw + "%"),      // 답변 내용
+                        cb.like(u2.get("username"), "%" + kw + "%"));   // 답변 작성자
+            }
+        };
     }
 }
